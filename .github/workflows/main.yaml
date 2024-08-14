@@ -1,0 +1,49 @@
+name: Build and publish PDF
+
+# Currently we run in two situations:
+on:
+  # 1) Whenever someone pushes to a branch
+  push:
+  # 2) Whenever a pull request is opened, reopened or gets new commits.
+  pull_request:
+  # This implies that for every push to a local branch in our repo for which a
+  # pull request is open this runs twice. But it's important to ensure that pull
+  # requests get tested even if their branch comes from a fork.
+
+# Cancel running builds on push on the same branch or pull request
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-on-iot-texlive:
+    # build using full TeX Live images by Island of TeX: https://gitlab.com/islandoftex/images/texlive
+    runs-on: ubuntu-22.04
+    name: "Build and upload PDF artifact using texlive:latest"
+    container:
+      image: registry.gitlab.com/islandoftex/images/texlive:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Run latexmk
+        run: "latexmk"
+      - name: Archive .pdf
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-output
+          path: "*.pdf"
+          retention-days: 21
+      - name: move pdf
+        run: mkdir -p build && mv *.pdf build/.
+      - uses: crazy-max/ghaction-github-pages@v4
+        # only publish pdf from main branch
+        if: github.ref == 'refs/heads/main'
+        with:
+          target_branch: pdf-output
+          build_dir: build
+          commit_message: Publish PDF Output
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
